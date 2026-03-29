@@ -59,16 +59,10 @@ class BuildPipeline: ObservableObject {
         await executeStep(.quote) { try await self.runQuote() }
         await executeStep(.order) { try await self.runOrder() }
 
-        log(nil, "")
-        log(nil, "  +-----------------------------------------+")
-        log(nil, "  |          BUILD COMPLETE                  |", highlight: true)
-        log(nil, "  +-----------------------------------------+")
-        log(nil, "")
-
         let succeeded = steps.filter { $0.state == .success }.count
         let skipped = steps.filter { $0.state == .skipped }.count
         let failed = steps.filter { $0.state == .failed }.count
-        log(nil, "  PASSED: \(succeeded)  SKIPPED: \(skipped)  FAILED: \(failed)")
+        log(nil, "Build complete: \(succeeded) passed, \(skipped) skipped, \(failed) failed")
 
         if !orderId.isEmpty {
             log(nil, "  ORDER: \(orderId)", highlight: true)
@@ -252,35 +246,43 @@ class BuildPipeline: ObservableObject {
         var totalCost = 0.0
         var matched = 0
 
-        for part in parsedParts.prefix(15) {
-            let pn = part["part_number"] as? String ?? ""
-            guard !pn.isEmpty else { continue }
-            let qty = part["quantity"] as? Int ?? 1
+        // Run all price lookups concurrently for speed
+        let partsToPrice = parsedParts.prefix(15)
+        let results = await withTaskGroup(of: (String, Int, Double, String).self) { group in
+            for part in partsToPrice {
+                let pn = part["part_number"] as? String ?? ""
+                let qty = part["quantity"] as? Int ?? 1
+                let customPrice = part["custom_price"] as? Double
+                let note = part["note"] as? String ?? ""
+                group.addTask {
+                    if let cp = customPrice {
+                        return (pn, qty, cp, note.isEmpty ? "custom" : note)
+                    }
+                    do {
+                        let price = try await self.api.searchAndPrice(partNumber: pn, quantity: qty)
+                        if price.unitPrice > 0 {
+                            return (pn, qty, price.unitPrice, price.supplier)
+                        }
+                    } catch {}
+                    return (pn, qty, 0.0, "")
+                }
+            }
+            var all: [(String, Int, Double, String)] = []
+            for await r in group { all.append(r) }
+            return all
+        }
 
-            // Check for custom/manual pricing first
-            if let customPrice = part["custom_price"] as? Double {
-                let lineTotal = customPrice * Double(qty)
+        // Log results in BOM order
+        for part in partsToPrice {
+            let pn = part["part_number"] as? String ?? ""
+            let qty = part["quantity"] as? Int ?? 1
+            guard let r = results.first(where: { $0.0 == pn }) else { continue }
+            if r.2 > 0 {
+                let lineTotal = r.2 * Double(qty)
                 totalCost += lineTotal
                 matched += 1
-                let note = part["note"] as? String ?? "custom"
-                log(.price, "  \(pn): $\(String(format: "%.2f", customPrice)) x\(qty) = $\(String(format: "%.2f", lineTotal)) [\(note)]")
-                continue
-            }
-
-            do {
-                let price = try await api.searchAndPrice(partNumber: pn, quantity: qty)
-                if price.unitPrice > 0 {
-                    let lineTotal = price.unitPrice * Double(qty)
-                    totalCost += lineTotal
-                    matched += 1
-                    log(.price, "  \(pn): $\(String(format: "%.2f", price.unitPrice)) x\(qty) = $\(String(format: "%.2f", lineTotal)) [\(price.supplier)]")
-                } else if price.stock > 0 {
-                    matched += 1
-                    log(.price, "  \(pn): in stock (\(price.stock) avail) -- price on request")
-                } else {
-                    log(.price, "  \(pn): searching suppliers...")
-                }
-            } catch {
+                log(.price, "  \(pn): $\(String(format: "%.2f", r.2)) x\(qty) = $\(String(format: "%.2f", lineTotal)) [\(r.3)]")
+            } else {
                 log(.price, "  \(pn): searching suppliers...")
             }
         }
@@ -323,7 +325,7 @@ class BuildPipeline: ObservableObject {
         // super_admin or "not yet connected" = unlimited
         if result.isAdmin || result.tier == "Trial" {
             creditBalance = 999999
-            log(.credits, "Balance: UNLIMITED (super_admin)", highlight: true)
+            log(.credits, "Balance: UNLIMITED (Boss' Credit Card / \u{8001}\u{677F})", highlight: true)
         } else {
             log(.credits, "Balance: \(result.balance) credits (\(result.currency))", highlight: true)
         }
@@ -382,11 +384,8 @@ class BuildPipeline: ObservableObject {
         log(.order, "GRAND TOTAL: $\(String(format: "%.2f", grand))", highlight: true)
         log(.order, "Order ready -- review and confirm below", highlight: true)
 
-        // Check for critical failures
-        let criticalFailures = steps.filter { $0.state == .failed && $0.id != .ecn }
-        if criticalFailures.isEmpty {
-            orderReady = true
-        }
+        // Always show the order card — user decides whether to proceed
+        orderReady = true
     }
 
     /// Called when the user clicks "Place Order" in the UI.

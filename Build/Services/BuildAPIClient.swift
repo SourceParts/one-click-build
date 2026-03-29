@@ -377,7 +377,7 @@ class BuildAPIClient {
 
         var request = URLRequest(url: url)
         setAuth(&request, apiKey: apiKey)
-        request.timeoutInterval = 10
+        request.timeoutInterval = 3
 
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {

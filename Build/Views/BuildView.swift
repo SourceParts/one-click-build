@@ -133,8 +133,8 @@ struct BuildView: View {
                     ProgressView().controlSize(.small).tint(.white)
                     Text("Building...").font(.system(size: 16, weight: .semibold))
                 } else if pipeline.isComplete {
-                    Image(systemName: "checkmark.circle.fill").font(.system(size: 16))
-                    Text("Build Complete").font(.system(size: 16, weight: .semibold))
+                    Image(systemName: "arrow.clockwise").font(.system(size: 16))
+                    Text("Build Again").font(.system(size: 16, weight: .semibold))
                 } else {
                     Image(systemName: "hammer.fill").font(.system(size: 16))
                     Text("Build").font(.system(size: 16, weight: .semibold))
@@ -196,23 +196,21 @@ struct BuildView: View {
     // MARK: - Card Detail Area
 
     private var cardDetail: some View {
-        ScrollView {
-            if let selected = selectedStep,
-               let step = pipeline.steps.first(where: { $0.id == selected }) {
-                // Single step detail
-                stepDetailCard(step)
-            } else {
-                // Show all steps that have content
+        ScrollViewReader { proxy in
+            ScrollView {
                 VStack(spacing: 10) {
-                    // Order card at the top when build is complete
-                    if pipeline.isComplete && pipeline.orderReady {
-                        orderCard
-                    }
-
-                    ForEach(pipeline.steps.filter { $0.state != .pending }) { step in
+                    if let selected = selectedStep,
+                       let step = pipeline.steps.first(where: { $0.id == selected }) {
                         stepDetailCard(step)
-                    }
-                    if pipeline.steps.allSatisfy({ $0.state == .pending }) {
+                    } else if pipeline.steps.contains(where: { $0.state != .pending }) {
+                        if pipeline.isComplete && pipeline.orderReady {
+                            orderCard
+                        }
+                        ForEach(pipeline.steps.filter { $0.state != .pending }) { step in
+                            stepDetailCard(step)
+                                .id(step.id)
+                        }
+                    } else {
                         VStack(spacing: 8) {
                             Image(systemName: "hammer")
                                 .font(.system(size: 28))
@@ -226,6 +224,13 @@ struct BuildView: View {
                     }
                 }
             }
+            .onChange(of: pipeline.logLines.count) { _, _ in
+                if let latest = pipeline.steps.last(where: { $0.state != .pending }) {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo(latest.id, anchor: .bottom)
+                    }
+                }
+            }
         }
     }
 
@@ -234,26 +239,38 @@ struct BuildView: View {
     private var orderCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             if pipeline.orderPlaced {
-                // Success state
-                VStack(spacing: 10) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 40))
+                // Congratulations state
+                VStack(spacing: 12) {
+                    Text("\u{1F389}")
+                        .font(.system(size: 48))
+                    Text("Congratulations!")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
                         .foregroundColor(successGreen)
-                    Text("Order Placed!")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundColor(successGreen)
+                    Text("Your order has been placed.")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(darkText)
                     Text(pipeline.orderId)
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .foregroundColor(subtleText)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(successGreen.opacity(0.1)))
+                    Text("Your board is on its way to the factory.")
+                        .font(.system(size: 12))
                         .foregroundColor(subtleText)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
+                .padding(.vertical, 24)
             } else {
-                // Header
+                // Ready to order
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Your board has been digitally forged.")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundColor(darkText)
+                    HStack(spacing: 8) {
+                        Text("\u{2728}")
+                            .font(.system(size: 22))
+                        Text("Your board has been digitally forged.")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundColor(darkText)
+                    }
                     Text("Review your order and place it with one click.")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(subtleText)
