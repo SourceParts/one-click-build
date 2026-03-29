@@ -5,12 +5,14 @@ cd "$(dirname "$0")"
 swift build "$@"
 
 BINARY="$(swift build --show-bin-path)/Build"
-ENTITLEMENTS="Build.entitlements"
+APP_DIR="Build.app/Contents/MacOS"
 
-if [ -f "$ENTITLEMENTS" ]; then
-    codesign --force --sign - --entitlements "$ENTITLEMENTS" "$BINARY" 2>/dev/null
-else
-    codesign --force --sign - "$BINARY" 2>/dev/null
-fi
+# Create .app bundle
+mkdir -p "$APP_DIR"
+cp "$BINARY" "$APP_DIR/Build"
 
-echo "Build complete: $BINARY"
+# Sign the bundle (no entitlements -- ad-hoc signing for dev)
+codesign --force --sign - Build.app 2>/dev/null
+
+echo "Build complete: Build.app"
+echo "Run: open Build.app"

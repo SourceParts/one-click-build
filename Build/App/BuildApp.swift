@@ -6,7 +6,7 @@ struct BuildApp: App {
     @StateObject private var pipeline = BuildPipeline()
 
     var body: some Scene {
-        WindowGroup("Build") {
+        WindowGroup("Parts Build") {
             BuildView()
                 .environmentObject(pipeline)
         }
