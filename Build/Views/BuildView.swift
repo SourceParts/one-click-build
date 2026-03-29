@@ -203,12 +203,13 @@ struct BuildView: View {
                        let step = pipeline.steps.first(where: { $0.id == selected }) {
                         stepDetailCard(step)
                     } else if pipeline.steps.contains(where: { $0.state != .pending }) {
-                        if pipeline.isComplete && pipeline.orderReady {
-                            orderCard
-                        }
                         ForEach(pipeline.steps.filter { $0.state != .pending }) { step in
                             stepDetailCard(step)
                                 .id(step.id)
+                        }
+                        if pipeline.isComplete && pipeline.orderReady {
+                            orderCard
+                                .id("order-card")
                         }
                     } else {
                         VStack(spacing: 8) {
@@ -225,7 +226,11 @@ struct BuildView: View {
                 }
             }
             .onChange(of: pipeline.logLines.count) { _, _ in
-                if let latest = pipeline.steps.last(where: { $0.state != .pending }) {
+                if pipeline.isComplete && pipeline.orderReady {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo("order-card", anchor: .bottom)
+                    }
+                } else if let latest = pipeline.steps.last(where: { $0.state != .pending }) {
                     withAnimation(.easeOut(duration: 0.15)) {
                         proxy.scrollTo(latest.id, anchor: .bottom)
                     }
