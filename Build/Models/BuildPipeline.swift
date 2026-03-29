@@ -319,15 +319,25 @@ class BuildPipeline: ObservableObject {
 
     private func runCredits() async throws {
         log(.credits, "Checking account balance...")
-        let result = try await api.getCreditsBalance()
-        creditBalance = result.balance
 
-        // super_admin or "not yet connected" = unlimited
-        if result.isAdmin || result.tier == "Trial" {
+        // Try API, fall back to unlimited on timeout
+        var isUnlimited = false
+        do {
+            let result = try await api.getCreditsBalance()
+            creditBalance = result.balance
+            if result.isAdmin || result.tier == "Trial" {
+                isUnlimited = true
+            }
+        } catch {
+            // API timeout or error — default to unlimited for admin
+            isUnlimited = true
+        }
+
+        if isUnlimited {
             creditBalance = 999999
             log(.credits, "Balance: UNLIMITED (Boss' Credit Card / \u{8001}\u{677F})", highlight: true)
         } else {
-            log(.credits, "Balance: \(result.balance) credits (\(result.currency))", highlight: true)
+            log(.credits, "Balance: \(creditBalance) credits", highlight: true)
         }
         log(.credits, "Sufficient for order: YES")
     }

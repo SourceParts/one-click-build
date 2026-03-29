@@ -196,7 +196,7 @@ class BuildAPIClient {
         let isLCSC = partNumber.hasPrefix("C") && partNumber.dropFirst().allSatisfy(\.isNumber)
         let query = isLCSC ? "lcsc-\(partNumber)" : partNumber
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        let data = try await apiGet("/v1/parts/search?q=\(encoded)&limit=3")
+        let data = try await apiGet("/v1/parts/search?q=\(encoded)&limit=3", timeout: 3)
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw APIError.invalidResponse
         }
@@ -371,13 +371,13 @@ class BuildAPIClient {
         request.setValue("PartsCLI/1.0", forHTTPHeaderField: "User-Agent")
     }
 
-    private func apiGet(_ path: String) async throws -> Data {
+    private func apiGet(_ path: String, timeout: TimeInterval = 10) async throws -> Data {
         guard let apiKey = APIKeychain.loadAPIKey() else { throw APIError.noAPIKey }
         guard let url = URL(string: "\(baseURL)\(path)") else { throw APIError.invalidURL }
 
         var request = URLRequest(url: url)
         setAuth(&request, apiKey: apiKey)
-        request.timeoutInterval = 3
+        request.timeoutInterval = timeout
 
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
