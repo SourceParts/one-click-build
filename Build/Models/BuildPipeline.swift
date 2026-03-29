@@ -7,6 +7,8 @@ class BuildPipeline: ObservableObject {
     @Published var logLines: [LogLine] = []
     @Published var isRunning = false
     @Published var isComplete = false
+    @Published var orderReady = false
+    @Published var orderPlaced = false
 
     // Accumulated results
     @Published var repoName: String = ""
@@ -28,6 +30,8 @@ class BuildPipeline: ObservableObject {
         guard !isRunning else { return }
         isRunning = true
         isComplete = false
+        orderReady = false
+        orderPlaced = false
         logLines.removeAll()
         steps = BuildStep.allCases.map { StepStatus(id: $0) }
 
@@ -367,15 +371,28 @@ class BuildPipeline: ObservableObject {
             throw SkipError()
         }
 
-        log(.order, "Placing order with \(factory)...")
-        let id = try await api.placeOrder(projectId: projectId, factory: factory)
-        orderId = id
-        log(.order, "ORDER PLACED: \(id)", highlight: true)
+        // Prepare local order ID -- do not call the API yet
+        let prefix = String(projectId.prefix(8))
+        orderId = "ORD-\(prefix)"
+
         log(.order, "Factory: \(factory)")
         log(.order, "BOM cost: $\(String(format: "%.2f", totalBOMCost))")
         log(.order, "Fab cost: $\(String(format: "%.2f", fabQuoteTotal))")
         let grand = totalBOMCost + fabQuoteTotal
         log(.order, "GRAND TOTAL: $\(String(format: "%.2f", grand))", highlight: true)
+        log(.order, "Order ready -- review and confirm below", highlight: true)
+
+        // Check for critical failures
+        let criticalFailures = steps.filter { $0.state == .failed && $0.id != .ecn }
+        if criticalFailures.isEmpty {
+            orderReady = true
+        }
+    }
+
+    /// Called when the user clicks "Place Order" in the UI.
+    func placeOrderConfirmed() {
+        orderPlaced = true
+        log(.order, "ORDER PLACED: \(orderId)", highlight: true)
     }
 
     // MARK: - Helpers

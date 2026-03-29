@@ -204,6 +204,11 @@ struct BuildView: View {
             } else {
                 // Show all steps that have content
                 VStack(spacing: 10) {
+                    // Order card at the top when build is complete
+                    if pipeline.isComplete && pipeline.orderReady {
+                        orderCard
+                    }
+
                     ForEach(pipeline.steps.filter { $0.state != .pending }) { step in
                         stepDetailCard(step)
                     }
@@ -221,6 +226,106 @@ struct BuildView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Order Card
+
+    private var orderCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if pipeline.orderPlaced {
+                // Success state
+                VStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(successGreen)
+                    Text("Order Placed!")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundColor(successGreen)
+                    Text(pipeline.orderId)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundColor(subtleText)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+            } else {
+                // Header
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Your board has been digitally forged.")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundColor(darkText)
+                    Text("Review your order and place it with one click.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(subtleText)
+                }
+
+                Divider()
+
+                // Summary
+                VStack(spacing: 8) {
+                    orderSummaryRow(label: "BOM Cost", value: String(format: "$%.2f", pipeline.totalBOMCost))
+                    orderSummaryRow(label: "Fab Cost (5 boards)", value: String(format: "$%.2f", pipeline.fabQuoteTotal))
+                    Divider()
+                    HStack {
+                        Text("Grand Total")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(darkText)
+                        Spacer()
+                        Text(String(format: "$%.2f", pipeline.totalBOMCost + pipeline.fabQuoteTotal))
+                            .font(.system(size: 17, weight: .bold, design: .monospaced))
+                            .foregroundColor(darkText)
+                    }
+                    HStack {
+                        Text("Factory")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(subtleText)
+                        Spacer()
+                        Text(pipeline.factory)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(subtleText)
+                    }
+                }
+
+                // Place Order button
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        pipeline.placeOrderConfirmed()
+                    }
+                }) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "cart.fill").font(.system(size: 16))
+                        Text("Place Order").font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(accent))
+                    .shadow(color: accent.opacity(0.3), radius: 8, y: 2)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(cardBG)
+                .shadow(color: Color.black.opacity(0.06), radius: 6, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(pipeline.orderPlaced ? successGreen.opacity(0.4) : accent.opacity(0.3), lineWidth: 1.5)
+        )
+    }
+
+    private func orderSummaryRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(subtleText)
+            Spacer()
+            Text(value)
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .foregroundColor(darkText)
         }
     }
 
